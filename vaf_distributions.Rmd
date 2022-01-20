@@ -1,0 +1,92 @@
+---
+title: "Artefacts_VAF"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(vcfR)
+library(ggplot2)
+setwd("~/Documents/Projects/myeloid/artefact_vaf")
+```
+
+
+```{r }
+
+total_vcf_dfs <-as.data.frame(matrix(ncol = 11, nrow = 1))
+colnames(total_vcf_dfs) <- c("sample_name", "gene","transcript", "transcript_annotation", "prev_count", "total_count", "vaf", "chr", "pos", "ref", "alt")
+
+
+mydir = "~/Documents/Projects/myeloid/artefact_vaf/data/"
+total_files =  list.files(path = paste0(mydir), pattern= ("*.vcf"))
+
+# loop over each vcf in the directory
+for(sample in 1:length(total_files)) {
+  # print(sample)
+  # read in sample 
+  vcf_file = list.files(path = paste0(mydir), pattern= ("*.vcf"))[sample]
+  vcf_file_dat <- read.vcfR(paste0(mydir, "/", vcf_file), verbose = FALSE) #read in the file as a dataframe
+  vcf_file_dat2 <- as.data.frame(vcf_file_dat@fix)
+  # loop through the files in the vcf to extract relavant info
+  df <-as.data.frame(matrix(ncol = 11, nrow = 1))
+  colnames(df) <- c("sample_name", "gene","transcript", "transcript_annotation", "prev_count", "total_count", "vaf", "chr", "pos", "ref", "alt")
+  for (i in 1:nrow(vcf_file_dat2)) {
+    df[i, "chr"] = vcf_file_dat2[i, "CHROM"]
+    df[i, "pos"] = vcf_file_dat2[i, "POS"]
+    df[i, "ref"] = vcf_file_dat2[i, "REF"]
+    df[i, "alt"] = vcf_file_dat2[i, "ALT"]
+    
+    # get annotation from the info column
+    # get every other elements as that is the annotation bit of the info that was split
+    vcf_file_dat2_annotation <- unlist(strsplit(vcf_file_dat2[i,"INFO"],"CSQ=", fixed = TRUE))[c(FALSE, TRUE)] 
+    df[i, "gene"] = unlist(strsplit(vcf_file_dat2_annotation,"|", fixed = TRUE))[1]
+    df[i, "transcript_annotation"] = unlist(strsplit(vcf_file_dat2_annotation,"|", fixed = TRUE))[5]
+    df[i, "transcript"] = unlist(strsplit(vcf_file_dat2_annotation,"|", fixed = TRUE))[16]
+    df[i, "prev_count"] = unlist(strsplit(vcf_file_dat2_annotation,"|", fixed = TRUE))[14]
+    df[i, "total_count"] = unlist(strsplit(vcf_file_dat2_annotation,"|", fixed = TRUE))[15]
+    
+    # get vaf from the gt list in vcf_file
+    df[i, "vaf"] = unname(unlist(strsplit(vcf_file_dat@gt[i,2],":", fixed = TRUE))[3])
+    df[i, "sample_name"] = names(unlist(strsplit(vcf_file_dat@gt[i,2],":", fixed = TRUE))[3])
+  }
+  total_vcf_dfs <- rbind(total_vcf_dfs, df)
+
+}
+
+
+
+
+```
+
+```{r}
+
+cols.num <- c("prev_count",  "total_count", "vaf", "pos")
+total_vcf_dfs[cols.num] <- sapply(total_vcf_dfs[cols.num],as.numeric)
+
+total_vcf_dfs_over20pc <- total_vcf_dfs[which(total_vcf_dfs$prev_count > 20), ]
+
+#how many groups of artefacts are there
+num_artefacts = unique(total_vcf_dfs_over20pc$transcript_annotation)
+
+pdf("/results/Artefacts_VAF_distribution.pdf")
+for (i in 1:length(num_artefacts)){
+  dat <- total_vcf_dfs_over20pc[which(total_vcf_dfs_over20pc$transcript_annotation == num_artefacts[i]), ]
+  p = ggplot(dat) +
+    geom_histogram(aes(x=vaf, y=..density..)) +
+    geom_density(aes(x=vaf, y=..density..), col="blue") +
+    geom_vline(aes(xintercept = mean(vaf)),col='red') +
+    # geom_text(aes(label = paste0("mean = ", round(mean(vaf), 2)))) +
+    geom_vline(xintercept = mean(dat$vaf)+sd(dat$vaf), linetype = 2, col = "red") +
+    geom_vline(xintercept = mean(dat$vaf)-sd(dat$vaf), linetype = 2, col = "red") +
+    labs(title = paste0(unname(unique(dat[, c("transcript_annotation", "gene", "chr", "pos")])), collapse = "_"))
+  print(p)
+}
+dev.off()
+
+```
+
+Out of `r nrow(total_vcf_dfs)` variants, `r nrow(total_vcf_dfs_over20pc)` have over 10% previous counts. There are `r num_artefacts` artefact variants
