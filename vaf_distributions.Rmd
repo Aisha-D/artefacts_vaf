@@ -14,7 +14,22 @@ library(ggplot2)
 setwd("~/Documents/Projects/myeloid/artefact_vaf")
 ```
 
+```{bash}
 
+projects=$(dx find projects --brief --name "002_*A0*MYE")
+
+
+for project in $projects; 
+do 
+    echo $project;
+	file_id=$(dx find data --json --path="$project" --name="*_allgenesvep.vcf" | jq -r '.[].id'); 
+	for file in $file_id;
+	do
+        dx download $file --no-progress;
+	done
+done
+
+```
 ```{r }
 
 total_vcf_dfs <-as.data.frame(matrix(ncol = 11, nrow = 1))
@@ -31,7 +46,7 @@ for(sample in 1:length(total_files)) {
   vcf_file = list.files(path = paste0(mydir), pattern= ("*.vcf"))[sample]
   vcf_file_dat <- read.vcfR(paste0(mydir, "/", vcf_file), verbose = FALSE) #read in the file as a dataframe
   vcf_file_dat2 <- as.data.frame(vcf_file_dat@fix)
-  # loop through the files in the vcf to extract relavant info
+  # loop through the variants  in the vcf to extract relevant info
   df <-as.data.frame(matrix(ncol = 11, nrow = 1))
   colnames(df) <- c("sample_name", "gene","transcript", "transcript_annotation", "prev_count", "total_count", "vaf", "chr", "pos", "ref", "alt")
   for (i in 1:nrow(vcf_file_dat2)) {
@@ -72,7 +87,7 @@ total_vcf_dfs_over20pc <- total_vcf_dfs[which(total_vcf_dfs$prev_count > 20), ]
 #how many groups of artefacts are there
 num_artefacts = unique(total_vcf_dfs_over20pc$transcript_annotation)
 
-pdf("/results/Artefacts_VAF_distribution.pdf")
+pdf("~/Documents/Projects/myeloid/artefact_vaf/results/Artefacts_VAF_distribution.pdf")
 for (i in 1:length(num_artefacts)){
   dat <- total_vcf_dfs_over20pc[which(total_vcf_dfs_over20pc$transcript_annotation == num_artefacts[i]), ]
   p = ggplot(dat) +
